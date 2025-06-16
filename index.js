@@ -8,14 +8,22 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 🔥 Firebase Setup (dual-mode for Render or local) - HARDENED
+// 🔥 Firebase Setup - FILE-BASED LOADING (bypass broken env var)
 let firebaseConfig;
-if (process.env.FIREBASE_CONFIG) {
-  // Fix malformed newlines from Render environment variables
-  const fixedConfig = process.env.FIREBASE_CONFIG.replace(/\\\\n/g, '\n');
-  firebaseConfig = JSON.parse(fixedConfig);
-} else {
+try {
+  // Try file first (more reliable)
   firebaseConfig = require("./firebase-service-account.json");
+  console.log("✅ Using file-based Firebase credentials");
+} catch (fileError) {
+  console.log("📁 File not found, trying environment variable...");
+  try {
+    const fixedConfig = process.env.FIREBASE_CONFIG.replace(/\\\\n/g, '\n');
+    firebaseConfig = JSON.parse(fixedConfig);
+    console.log("✅ Using environment Firebase credentials");
+  } catch (envError) {
+    console.error("🔥 Firebase credential loading failed:", envError.message);
+    process.exit(1);
+  }
 }
 
 admin.initializeApp({
@@ -131,4 +139,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () =>
   console.log(`🔥 render-endpoint listening on port ${PORT}`)
 );
-
