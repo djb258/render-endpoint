@@ -73,5 +73,42 @@ app.post("/generate-ui", async (req, res) => {
           },
         }
       );
-      responseText = r
+      responseText = r.data.content?.[0]?.text || "Error: No Claude content";
+    } else {
+      const r = await axios.post(
+        "https://api.openai.com/v1/chat/completions",
+        {
+          model: model,
+          messages: [{ role: "user", content: prompt }],
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      responseText =
+        r.data.choices?.[0]?.message?.content || "Error: No GPT content";
+    }
+
+    await db.collection("agent_task").doc(docId).update({
+      output_code: responseText,
+      validated: false,
+      timestamp_last_touched: new Date().toISOString(),
+    });
+
+    res.json({ status: "success", responseText });
+  } catch (e) {
+    console.error("🔥 LLM error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ------------------ START SERVER ------------------
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () =>
+  console.log(`🔥 render-endpoint listening on port ${PORT}`)
+);
+
 
