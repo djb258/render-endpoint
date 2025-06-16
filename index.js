@@ -8,10 +8,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 🔥 Firebase Setup (dual-mode for Render or local)
+// 🔥 Firebase Setup (dual-mode for Render or local) - HARDENED
 let firebaseConfig;
 if (process.env.FIREBASE_CONFIG) {
-  firebaseConfig = JSON.parse(process.env.FIREBASE_CONFIG);
+  // Fix malformed newlines from Render environment variables
+  const fixedConfig = process.env.FIREBASE_CONFIG.replace(/\\\\n/g, '\n');
+  firebaseConfig = JSON.parse(fixedConfig);
 } else {
   firebaseConfig = require("./firebase-service-account.json");
 }
@@ -24,9 +26,27 @@ const db = admin.firestore();
 
 // ------------------ ROUTES ------------------
 
-// ✅ Health check
-app.get("/health", (req, res) => {
-  res.status(200).json({ status: "ok", source: "render-endpoint" });
+// ✅ Health check with Firebase validation
+app.get("/health", async (req, res) => {
+  try {
+    // Test Firebase connection
+    await db.collection("health_check").doc("test").set({
+      timestamp: new Date().toISOString(),
+      status: "healthy"
+    });
+    res.status(200).json({ 
+      status: "ok", 
+      source: "render-endpoint",
+      firebase: "connected"
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      status: "degraded", 
+      source: "render-endpoint",
+      firebase: "error",
+      error: error.message
+    });
+  }
 });
 
 // ✅ Firestore write test
@@ -92,6 +112,7 @@ app.post("/generate-ui", async (req, res) => {
         r.data.choices?.[0]?.message?.content || "Error: No GPT content";
     }
 
+    // Write to Firebase with error handling
     await db.collection("agent_task").doc(docId).update({
       output_code: responseText,
       validated: false,
@@ -110,5 +131,4 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () =>
   console.log(`🔥 render-endpoint listening on port ${PORT}`)
 );
-
 
